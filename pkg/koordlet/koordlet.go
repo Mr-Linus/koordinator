@@ -1,17 +1,17 @@
 /*
-Copyright 2022 The Koordinator Authors.
+ Copyright 2022 The Koordinator Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package agent
@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
 	clientsetbeta1 "github.com/koordinator-sh/koordinator/pkg/client/clientset/versioned"
@@ -36,8 +37,9 @@ import (
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/pleg"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/reporter"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/resmanager"
+	"github.com/koordinator-sh/koordinator/pkg/koordlet/runtimehooks"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
-	sysutil "github.com/koordinator-sh/koordinator/pkg/koordlet/util/system"
+	"github.com/koordinator-sh/koordinator/pkg/util/system"
 )
 
 var (
@@ -58,6 +60,7 @@ type daemon struct {
 	metricCache    metriccache.MetricCache
 	reporter       reporter.Reporter
 	resManager     resmanager.ResManager
+	runtimeHook    runtimehooks.RuntimeHook
 }
 
 func NewDaemon(config *config.Configuration) (Daemon, error) {
@@ -69,20 +72,20 @@ func NewDaemon(config *config.Configuration) (Daemon, error) {
 	klog.Infof("NODE_NAME is %v,start time %v", nodeName, float64(time.Now().Unix()))
 	metrics.RecordKoordletStartTime(nodeName, float64(time.Now().Unix()))
 
-	klog.Infof("sysconf: %+v,agentMode:%v", sysutil.Conf, sysutil.AgentMode)
-	klog.Infof("kernel version INFO : %+v", sysutil.HostSystemInfo)
+	klog.Infof("sysconf: %+v,agentMode:%v", system.Conf, system.AgentMode)
+	klog.Infof("kernel version INFO : %+v", system.HostSystemInfo)
 
 	// setup cgroup path formatter from cgroup driver type
-	var detectCgroupDriver sysutil.CgroupDriverType
+	var detectCgroupDriver system.CgroupDriverType
 	if pollErr := wait.PollImmediate(time.Second*10, time.Minute, func() (bool, error) {
-		driver := sysutil.GuessCgroupDriverFromCgroupName()
+		driver := system.GuessCgroupDriverFromCgroupName()
 		if driver.Validate() {
 			detectCgroupDriver = driver
 			return true, nil
 		}
 		klog.Infof("can not detect cgroup driver from 'kubepods' cgroup name")
 
-		if driver, err := sysutil.GuessCgroupDriverFromKubelet(); err == nil && driver.Validate() {
+		if driver, err := system.GuessCgroupDriverFromKubelet(); err == nil && driver.Validate() {
 			detectCgroupDriver = driver
 			return true, nil
 		} else {
@@ -92,34 +95,40 @@ func NewDaemon(config *config.Configuration) (Daemon, error) {
 	}); pollErr != nil {
 		return nil, fmt.Errorf("can not detect kubelet cgroup driver: %v", pollErr)
 	}
-	sysutil.SetupCgroupPathFormatter(detectCgroupDriver)
+	system.SetupCgroupPathFormatter(detectCgroupDriver)
 	klog.Infof("Node %s use '%s' as cgroup driver", nodeName, string(detectCgroupDriver))
 
 	kubeClient := clientset.NewForConfigOrDie(config.KubeRestConf)
 	crdClient := clientsetbeta1.NewForConfigOrDie(config.KubeRestConf)
 
-	pleg, err := pleg.NewPLEG(sysutil.Conf.CgroupRootDir)
+	pleg, err := pleg.NewPLEG(system.Conf.CgroupRootDir)
 	if err != nil {
 		return nil, err
 	}
 
-	metaService := statesinformer.NewMetaService(config.MetaServiceConf, kubeClient, pleg, nodeName)
+	statesInformer := statesinformer.NewStatesInformer(config.StatesInformerConf, kubeClient, pleg, nodeName)
 	metricCache, err := metriccache.NewMetricCache(config.MetricCacheConf)
 	if err != nil {
 		return nil, err
 	}
 
-	collectorService := metricsadvisor.NewCollector(config.CollectorConf, metaService, metricCache)
-	reporterService := reporter.NewReporter(config.ReporterConf, kubeClient, crdClient, nodeName, metricCache, metaService)
+	collectorService := metricsadvisor.NewCollector(config.CollectorConf, statesInformer, metricCache)
+	reporterService := reporter.NewReporter(config.ReporterConf, kubeClient, crdClient, nodeName, metricCache, statesInformer)
 
-	resManagerService := resmanager.NewResManager(config.ResManagerConf, scheme, kubeClient, crdClient, nodeName, metaService, metricCache, int64(config.CollectorConf.CollectResUsedIntervalSeconds))
+	resManagerService := resmanager.NewResManager(config.ResManagerConf, scheme, kubeClient, crdClient, nodeName, statesInformer, metricCache, int64(config.CollectorConf.CollectResUsedIntervalSeconds))
+
+	runtimeHook, err := runtimehooks.NewRuntimeHook(config.RuntimeHookConf)
+	if err != nil {
+		return nil, err
+	}
 
 	d := &daemon{
 		collector:      collectorService,
-		statesInformer: metaService,
+		statesInformer: statesInformer,
 		metricCache:    metricCache,
 		reporter:       reporterService,
 		resManager:     resManagerService,
+		runtimeHook:    runtimeHook,
 	}
 
 	return d, nil
@@ -152,9 +161,11 @@ func (d *daemon) Run(stopCh <-chan struct{}) {
 		}
 	}()
 
-	// TODO add HasSync function for collector
-	klog.Infof("waiting 10 seconds for collector synced before start reporter")
-	time.Sleep(10 * time.Second)
+	// wait for collector sync
+	if !cache.WaitForCacheSync(stopCh, d.collector.HasSynced) {
+		klog.Error("time out waiting for collector to sync")
+		os.Exit(1)
+	}
 
 	// start reporter
 	go func() {
@@ -168,6 +179,13 @@ func (d *daemon) Run(stopCh <-chan struct{}) {
 	go func() {
 		if err := d.resManager.Run(stopCh); err != nil {
 			klog.Error("Unable to run the resManager: ", err)
+			os.Exit(1)
+		}
+	}()
+
+	go func() {
+		if err := d.runtimeHook.Run(stopCh); err != nil {
+			klog.Errorf("Unable to run the runtimeHook: ", err)
 			os.Exit(1)
 		}
 	}()

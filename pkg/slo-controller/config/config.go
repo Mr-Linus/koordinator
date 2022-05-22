@@ -1,17 +1,17 @@
 /*
-Copyright 2022 The Koordinator Authors.
+ Copyright 2022 The Koordinator Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package config
@@ -36,7 +36,7 @@ type ColocationCfg struct {
 
 type NodeColocationCfg struct {
 	NodeSelector *metav1.LabelSelector
-	ColocationCfg
+	ColocationStrategy
 }
 
 type ResourceThresholdCfg struct {
@@ -50,13 +50,37 @@ type NodeResourceThresholdStrategy struct {
 	*slov1alpha1.ResourceThresholdStrategy
 }
 
+type NodeCPUBurstCfg struct {
+	// an empty label selector matches all objects while a nil label selector matches no objects
+	NodeSelector *metav1.LabelSelector `json:"nodeSelector,omitempty"`
+	*slov1alpha1.CPUBurstStrategy
+}
+
+type CPUBurstCfg struct {
+	ClusterStrategy *slov1alpha1.CPUBurstStrategy `json:"clusterStrategy,omitempty"`
+	NodeStrategies  []NodeCPUBurstCfg             `json:"nodeStrategies,omitempty"`
+}
+
+type ResourceQoSCfg struct {
+	ClusterStrategy *slov1alpha1.ResourceQoSStrategy `json:"clusterStrategy,omitempty"`
+	NodeStrategies  []NodeResourceQoSStrategy        `json:"nodeStrategies,omitempty"`
+}
+
+type NodeResourceQoSStrategy struct {
+	// an empty label selector matches all objects while a nil label selector matches no objects
+	NodeSelector *metav1.LabelSelector `json:"nodeSelector,omitempty"`
+	*slov1alpha1.ResourceQoSStrategy
+}
+
 type ColocationStrategy struct {
-	Enable                        *bool    `json:"enable,omitempty"`
-	CPUReclaimThresholdPercent    *int64   `json:"cpuReclaimThresholdPercent,omitempty"`
-	MemoryReclaimThresholdPercent *int64   `json:"memoryReclaimThresholdPercent,omitempty"`
-	DegradeTimeMinutes            *int64   `json:"degradeTimeMinutes,omitempty"`
-	UpdateTimeThresholdSeconds    *int64   `json:"updateTimeThresholdSeconds,omitempty"`
-	ResourceDiffThreshold         *float64 `json:"resourceDiffThreshold,omitempty"`
+	Enable                         *bool    `json:"enable,omitempty"`
+	MetricAggregateDurationSeconds *int64   `json:"metricAggregateDurationSeconds,omitempty"`
+	MetricReportIntervalSeconds    *int64   `json:"metricReportIntervalSeconds,omitempty"`
+	CPUReclaimThresholdPercent     *int64   `json:"cpuReclaimThresholdPercent,omitempty"`
+	MemoryReclaimThresholdPercent  *int64   `json:"memoryReclaimThresholdPercent,omitempty"`
+	DegradeTimeMinutes             *int64   `json:"degradeTimeMinutes,omitempty"`
+	UpdateTimeThresholdSeconds     *int64   `json:"updateTimeThresholdSeconds,omitempty"`
+	ResourceDiffThreshold          *float64 `json:"resourceDiffThreshold,omitempty"`
 }
 
 func NewDefaultColocationCfg() *ColocationCfg {
@@ -72,17 +96,21 @@ func DefaultColocationCfg() ColocationCfg {
 
 func DefaultColocationStrategy() ColocationStrategy {
 	return ColocationStrategy{
-		Enable:                        pointer.Bool(false),
-		CPUReclaimThresholdPercent:    pointer.Int64(60),
-		MemoryReclaimThresholdPercent: pointer.Int64(65),
-		DegradeTimeMinutes:            pointer.Int64(15),
-		UpdateTimeThresholdSeconds:    pointer.Int64(300),
-		ResourceDiffThreshold:         pointer.Float64(0.1),
+		Enable:                         pointer.Bool(false),
+		MetricAggregateDurationSeconds: pointer.Int64(30),
+		MetricReportIntervalSeconds:    pointer.Int64(60),
+		CPUReclaimThresholdPercent:     pointer.Int64(60),
+		MemoryReclaimThresholdPercent:  pointer.Int64(65),
+		DegradeTimeMinutes:             pointer.Int64(15),
+		UpdateTimeThresholdSeconds:     pointer.Int64(300),
+		ResourceDiffThreshold:          pointer.Float64(0.1),
 	}
 }
 
 func IsColocationStrategyValid(strategy *ColocationStrategy) bool {
 	return strategy != nil &&
+		(strategy.MetricAggregateDurationSeconds == nil || *strategy.MetricReportIntervalSeconds > 0) &&
+		(strategy.MetricReportIntervalSeconds == nil || *strategy.MetricReportIntervalSeconds > 0) &&
 		(strategy.CPUReclaimThresholdPercent == nil || *strategy.CPUReclaimThresholdPercent > 0) &&
 		(strategy.MemoryReclaimThresholdPercent == nil || *strategy.MemoryReclaimThresholdPercent > 0) &&
 		(strategy.DegradeTimeMinutes == nil || *strategy.DegradeTimeMinutes > 0) &&
@@ -132,19 +160,4 @@ func GetNodeColocationStrategy(cfg *ColocationCfg, node *corev1.Node) *Colocatio
 		}
 	}
 	return strategy
-}
-
-// DefaultNodeSLOSpecConfig defines the default config of the nodeSLOSpec, which would be used by the resmgr
-func DefaultNodeSLOSpecConfig() slov1alpha1.NodeSLOSpec {
-	return slov1alpha1.NodeSLOSpec{
-		ResourceUsedThresholdWithBE: DefaultResourceThresholdStrategy(),
-	}
-}
-
-func DefaultResourceThresholdStrategy() *slov1alpha1.ResourceThresholdStrategy {
-	return &slov1alpha1.ResourceThresholdStrategy{
-		Enable:                      pointer.BoolPtr(false),
-		CPUSuppressThresholdPercent: pointer.Int64Ptr(65),
-		CPUSuppressPolicy:           slov1alpha1.CPUSetPolicy,
-	}
 }

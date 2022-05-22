@@ -1,17 +1,17 @@
 /*
-Copyright 2022 The Koordinator Authors.
+ Copyright 2022 The Koordinator Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package statesinformer
@@ -36,7 +36,7 @@ import (
 
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/metrics"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/pleg"
-	"github.com/koordinator-sh/koordinator/pkg/koordlet/util"
+	"github.com/koordinator-sh/koordinator/pkg/util"
 )
 
 type StatesInformer interface {
@@ -65,7 +65,7 @@ type statesInformer struct {
 	podUpdatedTime time.Time
 }
 
-func NewMetaService(config *Config, kubeClient clientset.Interface, pleg pleg.Pleg, nodeName string) StatesInformer {
+func NewStatesInformer(config *Config, kubeClient clientset.Interface, pleg pleg.Pleg, nodeName string) StatesInformer {
 	nodeInformer := newNodeInformer(kubeClient, nodeName)
 
 	m := &statesInformer{
@@ -108,7 +108,7 @@ func NewMetaService(config *Config, kubeClient clientset.Interface, pleg pleg.Pl
 
 func (m *statesInformer) Run(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
-	klog.Infof("starting metaservice")
+	klog.Infof("starting statesInformer")
 
 	klog.Infof("starting informer for Node")
 	go m.nodeInformer.Run(stopCh)
@@ -129,7 +129,7 @@ func (m *statesInformer) Run(stopCh <-chan struct{}) error {
 
 		go m.syncKubeletLoop(time.Duration(m.config.KubeletSyncIntervalSeconds)*time.Second, stopCh)
 	} else {
-		klog.Infof("KubeletSyncIntervalSeconds is %d, metaservice sync of kubelet is disabled",
+		klog.Infof("KubeletSyncIntervalSeconds is %d, statesInformer sync of kubelet is disabled",
 			m.config.KubeletSyncIntervalSeconds)
 	}
 	klog.Infof("start meta service successfully")

@@ -1,30 +1,31 @@
 /*
-Copyright 2022 The Koordinator Authors.
+ Copyright 2022 The Koordinator Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package resmanager
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -40,10 +41,18 @@ import (
 	koordclientset "github.com/koordinator-sh/koordinator/pkg/client/clientset/versioned"
 	slolisterv1alpha1 "github.com/koordinator-sh/koordinator/pkg/client/listers/slo/v1alpha1"
 	"github.com/koordinator-sh/koordinator/pkg/features"
+	"github.com/koordinator-sh/koordinator/pkg/koordlet/audit"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/metriccache"
+	"github.com/koordinator-sh/koordinator/pkg/koordlet/metrics"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
-	koordletutil "github.com/koordinator-sh/koordinator/pkg/koordlet/util"
+	"github.com/koordinator-sh/koordinator/pkg/runtime"
+	expireCache "github.com/koordinator-sh/koordinator/pkg/tools/cache"
 	"github.com/koordinator-sh/koordinator/pkg/util"
+)
+
+const (
+	evictPodSuccess = "evictPodSuccess"
+	evictPodFail    = "evictPodFail"
 )
 
 type ResManager interface {
@@ -57,6 +66,7 @@ type resmanager struct {
 	schema                        *apiruntime.Scheme
 	statesInformer                statesinformer.StatesInformer
 	metricCache                   metriccache.MetricCache
+	podsEvicted                   *expireCache.Cache
 	nodeSLOInformer               cache.SharedIndexInformer
 	nodeSLOLister                 slolisterv1alpha1.NodeSLOLister
 	kubeClient                    clientset.Interface
@@ -88,22 +98,8 @@ func newNodeSLOInformer(client koordclientset.Interface, nodeName string) cache.
 	)
 }
 
-// mergeSLOSpecResourceUsedThresholdWithBE merges the nodeSLO ResourceUsedThresholdWithBE with default configs
-func mergeSLOSpecResourceUsedThresholdWithBE(defaultSpec, newSpec *slov1alpha1.ResourceThresholdStrategy) *slov1alpha1.ResourceThresholdStrategy {
-	spec := &slov1alpha1.ResourceThresholdStrategy{}
-	if newSpec != nil {
-		spec = newSpec
-	}
-	// ignore err for serializing/deserializing the same struct type
-	data, _ := json.Marshal(spec)
-	// NOTE: use deepcopy to avoid a overwrite to the global default
-	out := defaultSpec.DeepCopy()
-	_ = json.Unmarshal(data, &out)
-	return out
-}
-
-// mergeDefaultNodeSLO merges nodeSLO with default config; ensure use the function with a RWMutex
-func (r *resmanager) mergeDefaultNodeSLO(nodeSLO *slov1alpha1.NodeSLO) {
+// mergeNodeSLOSpec merges nodeSLO with default config; ensure use the function with a RWMutex
+func (r *resmanager) mergeNodeSLOSpec(nodeSLO *slov1alpha1.NodeSLO) {
 	if r.nodeSLO == nil || nodeSLO == nil {
 		klog.Errorf("failed to merge with nil nodeSLO, old: %v, new: %v", r.nodeSLO, nodeSLO)
 		return
@@ -114,6 +110,21 @@ func (r *resmanager) mergeDefaultNodeSLO(nodeSLO *slov1alpha1.NodeSLO) {
 		nodeSLO.Spec.ResourceUsedThresholdWithBE)
 	if mergedResourceUsedThresholdWithBESpec != nil {
 		r.nodeSLO.Spec.ResourceUsedThresholdWithBE = mergedResourceUsedThresholdWithBESpec
+	}
+
+	// merge ResourceQoSStrategy
+	mergedResourceQoSStrategySpec := mergeSLOSpecResourceQoSStrategy(util.DefaultNodeSLOSpecConfig().ResourceQoSStrategy,
+		nodeSLO.Spec.ResourceQoSStrategy)
+	mergeNoneResourceQoSIfDisabled(mergedResourceQoSStrategySpec)
+	if mergedResourceQoSStrategySpec != nil {
+		r.nodeSLO.Spec.ResourceQoSStrategy = mergedResourceQoSStrategySpec
+	}
+
+	// merge CPUBurstStrategy
+	mergedCPUBurstStrategySpec := mergeSLOSpecCPUBurstStrategy(util.DefaultNodeSLOSpecConfig().CPUBurstStrategy,
+		nodeSLO.Spec.CPUBurstStrategy)
+	if mergedCPUBurstStrategySpec != nil {
+		r.nodeSLO.Spec.CPUBurstStrategy = mergedCPUBurstStrategySpec
 	}
 }
 
@@ -127,7 +138,7 @@ func (r *resmanager) createNodeSLO(nodeSLO *slov1alpha1.NodeSLO) {
 	r.nodeSLO.Spec = nodeSLO.Spec
 
 	// merge nodeSLO spec with the default config
-	r.mergeDefaultNodeSLO(nodeSLO)
+	r.mergeNodeSLOSpec(nodeSLO)
 
 	newNodeSLOStr := util.DumpJSON(r.nodeSLO)
 	klog.Infof("update nodeSLO content: old %s, new %s", oldNodeSLOStr, newNodeSLOStr)
@@ -153,7 +164,7 @@ func (r *resmanager) updateNodeSLOSpec(nodeSLO *slov1alpha1.NodeSLO) {
 	r.nodeSLO.Spec = nodeSLO.Spec
 
 	// merge nodeSLO spec with the default config
-	r.mergeDefaultNodeSLO(nodeSLO)
+	r.mergeNodeSLOSpec(nodeSLO)
 
 	newNodeSLOStr := util.DumpJSON(r.nodeSLO)
 	klog.Infof("update nodeSLO content: old %s, new %s", oldNodeSLOStr, newNodeSLOStr)
@@ -173,6 +184,7 @@ func NewResManager(cfg *Config, schema *apiruntime.Scheme, kubeClient clientset.
 		schema:                        schema,
 		statesInformer:                statesInformer,
 		metricCache:                   metricCache,
+		podsEvicted:                   expireCache.NewCacheDefault(),
 		nodeSLOInformer:               informer,
 		nodeSLOLister:                 slolisterv1alpha1.NewNodeSLOLister(informer.GetIndexer()),
 		kubeClient:                    kubeClient,
@@ -211,25 +223,26 @@ func NewResManager(cfg *Config, schema *apiruntime.Scheme, kubeClient clientset.
 // isFeatureDisabled returns whether the featuregate is disabled by nodeSLO config
 func isFeatureDisabled(nodeSLO *slov1alpha1.NodeSLO, feature featuregate.Feature) (bool, error) {
 	if nodeSLO == nil || nodeSLO.Spec == (slov1alpha1.NodeSLOSpec{}) {
-		return false, fmt.Errorf("cannot parse feature config for invalid nodeSLO %v", nodeSLO)
+		return true, fmt.Errorf("cannot parse feature config for invalid nodeSLO %v", nodeSLO)
 	}
 
 	spec := nodeSLO.Spec
 	switch feature {
-	case features.BECPUSuppress:
-		// nil value means enabled
-		if spec.ResourceUsedThresholdWithBE == nil {
-			return false, fmt.Errorf("cannot parse feature config for invalid nodeSLO %v", nodeSLO)
+	case features.BECPUSuppress, features.BEMemoryEvict:
+		if spec.ResourceUsedThresholdWithBE == nil || spec.ResourceUsedThresholdWithBE.Enable == nil {
+			return true, fmt.Errorf("cannot parse feature config for invalid nodeSLO %v", nodeSLO)
 		}
-		return spec.ResourceUsedThresholdWithBE.Enable != nil && !(*spec.ResourceUsedThresholdWithBE.Enable), nil
+		return !(*spec.ResourceUsedThresholdWithBE.Enable), nil
 	default:
-		return false, fmt.Errorf("cannot parse feature config for unsupported feature %s", feature)
+		return true, fmt.Errorf("cannot parse feature config for unsupported feature %s", feature)
 	}
 }
 
 func (r *resmanager) Run(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 	klog.Info("Starting resmanager")
+
+	r.podsEvicted.Run(stopCh)
 
 	klog.Infof("starting informer for NodeSLO")
 	go r.nodeSLOInformer.Run(stopCh)
@@ -244,8 +257,25 @@ func (r *resmanager) Run(stopCh <-chan struct{}) error {
 		return fmt.Errorf("time out waiting for sync NodeSLO")
 	}
 
+	util.RunFeature(r.reconcileBECgroup, []featuregate.Feature{features.BECgroupReconcile}, r.config.ReconcileIntervalSeconds, stopCh)
+
+	cgroupResourceReconcile := NewCgroupResourcesReconcile(r)
+	util.RunFeatureWithInit(func() error { return cgroupResourceReconcile.RunInit(stopCh) }, cgroupResourceReconcile.reconcile,
+		[]featuregate.Feature{features.CgroupReconcile}, r.config.ReconcileIntervalSeconds, stopCh)
+
 	cpuSuppress := NewCPUSuppress(r)
-	koordletutil.RunFeature(cpuSuppress.suppressBECPU, []featuregate.Feature{features.BECPUSuppress}, r.config.CPUSuppressIntervalSeconds, stopCh)
+	util.RunFeature(cpuSuppress.suppressBECPU, []featuregate.Feature{features.BECPUSuppress}, r.config.CPUSuppressIntervalSeconds, stopCh)
+
+	cpuBurst := NewCPUBurst(r)
+	util.RunFeatureWithInit(func() error { return cpuBurst.init(stopCh) }, cpuBurst.start,
+		[]featuregate.Feature{features.CPUBurst}, r.config.ReconcileIntervalSeconds, stopCh)
+
+	memoryEvictor := NewMemoryEvictor(r)
+	util.RunFeature(memoryEvictor.memoryEvict, []featuregate.Feature{features.BEMemoryEvict}, r.config.MemoryEvictIntervalSeconds, stopCh)
+
+	rdtResCtrl := NewResctrlReconcile(r)
+	util.RunFeatureWithInit(func() error { return rdtResCtrl.RunInit(stopCh) }, rdtResCtrl.reconcile,
+		[]featuregate.Feature{features.RdtResctrl}, r.config.ReconcileIntervalSeconds, stopCh)
 
 	klog.Info("Starting resmanager successfully")
 	<-stopCh
@@ -258,4 +288,74 @@ func (r *resmanager) hasSynced() bool {
 	defer r.nodeSLORWMutex.Unlock()
 
 	return r.nodeSLO != nil && r.nodeSLO.Spec.ResourceUsedThresholdWithBE != nil
+}
+
+func (r *resmanager) evictPodsIfNotEvicted(evictPods []*corev1.Pod, node *corev1.Node, reason string, message string) {
+	for _, evictPod := range evictPods {
+		r.evictPodIfNotEvicted(evictPod, node, reason, message)
+	}
+}
+
+func (r *resmanager) evictPodIfNotEvicted(evictPod *corev1.Pod, node *corev1.Node, reason string, message string) {
+	_, evicted := r.podsEvicted.Get(string(evictPod.UID))
+	if evicted {
+		klog.V(5).Infof("Pod has been evicted! podID: %v, evict reason: %s", evictPod.UID, reason)
+		return
+	}
+	success := r.evictPod(evictPod, node, reason, message)
+	if success {
+		_ = r.podsEvicted.SetDefault(string(evictPod.UID), evictPod.UID)
+	}
+}
+
+func (r *resmanager) evictPod(evictPod *corev1.Pod, node *corev1.Node, reason string, message string) bool {
+	podEvictMessage := fmt.Sprintf("evict Pod:%s, reason: %s, message: %v", evictPod.Name, reason, message)
+	_ = audit.V(0).Pod(evictPod.Namespace, evictPod.Name).Reason(reason).Message(message).Do()
+	podEvict := policyv1.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      evictPod.Name,
+			Namespace: evictPod.Namespace,
+		},
+	}
+
+	if err := r.kubeClient.CoreV1().Pods(evictPod.Namespace).EvictV1(context.TODO(), &podEvict); err == nil {
+		r.eventRecorder.Eventf(node, corev1.EventTypeWarning, evictPodSuccess, podEvictMessage)
+		metrics.RecordPodEviction(reason)
+		klog.Infof("evict pod %v/%v success, reason: %v", evictPod.Namespace, evictPod.Name, reason)
+		return true
+	} else if !errors.IsNotFound(err) {
+		r.eventRecorder.Eventf(node, corev1.EventTypeWarning, evictPodFail, podEvictMessage)
+		klog.Errorf("evict pod %v/%v failed, reason: %v, error: %v", evictPod.Namespace, evictPod.Name, reason, err)
+		return false
+	}
+	return true
+}
+
+// killContainers kills containers inside the pod
+func killContainers(pod *corev1.Pod, message string) {
+	for _, container := range pod.Spec.Containers {
+		containerID, containerStatus, err := util.FindContainerIdAndStatusByName(&pod.Status, container.Name)
+		if err != nil {
+			klog.Errorf("failed to find container id and status, error: %v", err)
+			return
+		}
+
+		if containerStatus == nil || containerStatus.State.Running == nil {
+			return
+		}
+
+		if containerID != "" {
+			runtimeType, _, _ := util.ParseContainerId(containerStatus.ContainerID)
+			runtimeHandler, err := runtime.GetRuntimeHandler(runtimeType)
+			if err != nil || runtimeHandler == nil {
+				klog.Errorf("%s, kill container(%s) error! GetRuntimeHandler fail! error: %v", message, containerStatus.ContainerID, err)
+				continue
+			}
+			if err := runtimeHandler.StopContainer(containerID, 0); err != nil {
+				klog.Errorf("%s, stop container error! error: %v", message, err)
+			}
+		} else {
+			klog.Warningf("%s, get container ID failed, pod %s/%s containerName %s status: %v", message, pod.Namespace, pod.Name, container.Name, pod.Status.ContainerStatuses)
+		}
+	}
 }
