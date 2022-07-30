@@ -67,23 +67,35 @@ spec:
                     format: int64
                     type: integer
                 type: object
-              resourceQoSStrategy:
+              resourceQOSStrategy:
                 description: QoS config strategy for pods of different qos-class
                 properties:
-                  be:
-                    description: ResourceQoS for BE pods.
+                  beClass:
+                    description: ResourceQOS for BE pods.
                     properties:
-                      memoryQoS:
-                        description: MemoryQoSCfg stores node-level config of memory
+                      cpuQOS:
+                        description: CPUQOSCfg stores node-level config of cpu qos
+                        properties:
+                          enable:
+                            description: Enable indicates whether the cpu qos is enabled.
+                            type: boolean
+                          groupIdentity:
+                            description: group identity value for pods, default =
+                              0
+                            format: int64
+                            type: integer
+                        type: object
+                      memoryQOS:
+                        description: MemoryQOSCfg stores node-level config of memory
                           qos
                         properties:
                           enable:
                             description: 'Enable indicates whether the memory qos
                               is enabled (default: false). This field is used for
                               node-level control, while pod-level configuration is
-                              done with MemoryQoS and `Policy` instead of an `Enable`
-                              option. Please view the differences between MemoryQoSCfg
-                              and PodMemoryQoSConfig structs.'
+                              done with MemoryQOS and `Policy` instead of an `Enable`
+                              option. Please view the differences between MemoryQOSCfg
+                              and PodMemoryQOSConfig structs.'
                             type: boolean
                           lowLimitPercent:
                             description: 'LowLimitPercent specifies the lowLimitFactor
@@ -174,8 +186,8 @@ spec:
                             minimum: 1
                             type: integer
                         type: object
-                      resctrlQoS:
-                        description: ResctrlQoSCfg stores node-level config of resctrl
+                      resctrlQOS:
+                        description: ResctrlQOSCfg stores node-level config of resctrl
                           qos
                         properties:
                           catRangeEndPercent:
@@ -206,19 +218,31 @@ spec:
                         type: object
                     type: object
                   cgroupRoot:
-                    description: ResourceQoS for root cgroup.
+                    description: ResourceQOS for root cgroup.
                     properties:
-                      memoryQoS:
-                        description: MemoryQoSCfg stores node-level config of memory
+                      cpuQOS:
+                        description: CPUQOSCfg stores node-level config of cpu qos
+                        properties:
+                          enable:
+                            description: Enable indicates whether the cpu qos is enabled.
+                            type: boolean
+                          groupIdentity:
+                            description: group identity value for pods, default =
+                              0
+                            format: int64
+                            type: integer
+                        type: object
+                      memoryQOS:
+                        description: MemoryQOSCfg stores node-level config of memory
                           qos
                         properties:
                           enable:
                             description: 'Enable indicates whether the memory qos
                               is enabled (default: false). This field is used for
                               node-level control, while pod-level configuration is
-                              done with MemoryQoS and `Policy` instead of an `Enable`
-                              option. Please view the differences between MemoryQoSCfg
-                              and PodMemoryQoSConfig structs.'
+                              done with MemoryQOS and `Policy` instead of an `Enable`
+                              option. Please view the differences between MemoryQOSCfg
+                              and PodMemoryQOSConfig structs.'
                             type: boolean
                           lowLimitPercent:
                             description: 'LowLimitPercent specifies the lowLimitFactor
@@ -309,8 +333,8 @@ spec:
                             minimum: 1
                             type: integer
                         type: object
-                      resctrlQoS:
-                        description: ResctrlQoSCfg stores node-level config of resctrl
+                      resctrlQOS:
+                        description: ResctrlQOSCfg stores node-level config of resctrl
                           qos
                         properties:
                           catRangeEndPercent:
@@ -340,20 +364,32 @@ spec:
                             type: integer
                         type: object
                     type: object
-                  ls:
-                    description: ResourceQoS for LS pods.
+                  lsClass:
+                    description: ResourceQOS for LS pods.
                     properties:
-                      memoryQoS:
-                        description: MemoryQoSCfg stores node-level config of memory
+                      cpuQOS:
+                        description: CPUQOSCfg stores node-level config of cpu qos
+                        properties:
+                          enable:
+                            description: Enable indicates whether the cpu qos is enabled.
+                            type: boolean
+                          groupIdentity:
+                            description: group identity value for pods, default =
+                              0
+                            format: int64
+                            type: integer
+                        type: object
+                      memoryQOS:
+                        description: MemoryQOSCfg stores node-level config of memory
                           qos
                         properties:
                           enable:
                             description: 'Enable indicates whether the memory qos
                               is enabled (default: false). This field is used for
                               node-level control, while pod-level configuration is
-                              done with MemoryQoS and `Policy` instead of an `Enable`
-                              option. Please view the differences between MemoryQoSCfg
-                              and PodMemoryQoSConfig structs.'
+                              done with MemoryQOS and `Policy` instead of an `Enable`
+                              option. Please view the differences between MemoryQOSCfg
+                              and PodMemoryQOSConfig structs.'
                             type: boolean
                           lowLimitPercent:
                             description: 'LowLimitPercent specifies the lowLimitFactor
@@ -444,8 +480,8 @@ spec:
                             minimum: 1
                             type: integer
                         type: object
-                      resctrlQoS:
-                        description: ResctrlQoSCfg stores node-level config of resctrl
+                      resctrlQOS:
+                        description: ResctrlQOSCfg stores node-level config of resctrl
                           qos
                         properties:
                           catRangeEndPercent:
@@ -475,20 +511,32 @@ spec:
                             type: integer
                         type: object
                     type: object
-                  lsr:
-                    description: ResourceQoS for LSR pods.
+                  lsrClass:
+                    description: ResourceQOS for LSR pods.
                     properties:
-                      memoryQoS:
-                        description: MemoryQoSCfg stores node-level config of memory
+                      cpuQOS:
+                        description: CPUQOSCfg stores node-level config of cpu qos
+                        properties:
+                          enable:
+                            description: Enable indicates whether the cpu qos is enabled.
+                            type: boolean
+                          groupIdentity:
+                            description: group identity value for pods, default =
+                              0
+                            format: int64
+                            type: integer
+                        type: object
+                      memoryQOS:
+                        description: MemoryQOSCfg stores node-level config of memory
                           qos
                         properties:
                           enable:
                             description: 'Enable indicates whether the memory qos
                               is enabled (default: false). This field is used for
                               node-level control, while pod-level configuration is
-                              done with MemoryQoS and `Policy` instead of an `Enable`
-                              option. Please view the differences between MemoryQoSCfg
-                              and PodMemoryQoSConfig structs.'
+                              done with MemoryQOS and `Policy` instead of an `Enable`
+                              option. Please view the differences between MemoryQOSCfg
+                              and PodMemoryQOSConfig structs.'
                             type: boolean
                           lowLimitPercent:
                             description: 'LowLimitPercent specifies the lowLimitFactor
@@ -579,8 +627,8 @@ spec:
                             minimum: 1
                             type: integer
                         type: object
-                      resctrlQoS:
-                        description: ResctrlQoSCfg stores node-level config of resctrl
+                      resctrlQOS:
+                        description: ResctrlQOSCfg stores node-level config of resctrl
                           qos
                         properties:
                           catRangeEndPercent:
@@ -610,20 +658,32 @@ spec:
                             type: integer
                         type: object
                     type: object
-                  system:
-                    description: ResourceQoS for system pods
+                  systemClass:
+                    description: ResourceQOS for system pods
                     properties:
-                      memoryQoS:
-                        description: MemoryQoSCfg stores node-level config of memory
+                      cpuQOS:
+                        description: CPUQOSCfg stores node-level config of cpu qos
+                        properties:
+                          enable:
+                            description: Enable indicates whether the cpu qos is enabled.
+                            type: boolean
+                          groupIdentity:
+                            description: group identity value for pods, default =
+                              0
+                            format: int64
+                            type: integer
+                        type: object
+                      memoryQOS:
+                        description: MemoryQOSCfg stores node-level config of memory
                           qos
                         properties:
                           enable:
                             description: 'Enable indicates whether the memory qos
                               is enabled (default: false). This field is used for
                               node-level control, while pod-level configuration is
-                              done with MemoryQoS and `Policy` instead of an `Enable`
-                              option. Please view the differences between MemoryQoSCfg
-                              and PodMemoryQoSConfig structs.'
+                              done with MemoryQOS and `Policy` instead of an `Enable`
+                              option. Please view the differences between MemoryQOSCfg
+                              and PodMemoryQOSConfig structs.'
                             type: boolean
                           lowLimitPercent:
                             description: 'LowLimitPercent specifies the lowLimitFactor
@@ -714,8 +774,8 @@ spec:
                             minimum: 1
                             type: integer
                         type: object
-                      resctrlQoS:
-                        description: ResctrlQoSCfg stores node-level config of resctrl
+                      resctrlQOS:
+                        description: ResctrlQOSCfg stores node-level config of resctrl
                           qos
                         properties:
                           catRangeEndPercent:
@@ -749,6 +809,22 @@ spec:
               resourceUsedThresholdWithBE:
                 description: BE pods will be limited if node resource usage overload
                 properties:
+                  cpuEvictBESatisfactionLowerPercent:
+                    description: if be CPU (RealLimit/allocatedLimit < CPUEvictBESatisfactionLowerPercent
+                      and usage nearly 100%) continue CPUEvictTimeWindowSeconds,then
+                      start evict
+                    format: int64
+                    type: integer
+                  cpuEvictBESatisfactionUpperPercent:
+                    description: if be CPU RealLimit/allocatedLimit > CPUEvictBESatisfactionUpperPercent,
+                      then stop evict BE pods
+                    format: int64
+                    type: integer
+                  cpuEvictTimeWindowSeconds:
+                    description: cpu evict start after continue avg(cpuusage) > CPUEvictThresholdPercent
+                      in seconds
+                    format: int64
+                    type: integer
                   cpuSuppressPolicy:
                     description: CPUSuppressPolicy
                     type: string

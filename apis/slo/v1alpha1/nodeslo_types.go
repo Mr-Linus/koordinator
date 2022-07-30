@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package v1alpha1
@@ -23,8 +23,14 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// MemoryQoS enables memory qos features.
-type MemoryQoS struct {
+// CPUQOS enables cpu qos features.
+type CPUQOS struct {
+	// group identity value for pods, default = 0
+	GroupIdentity *int64 `json:"groupIdentity,omitempty"`
+}
+
+// MemoryQOS enables memory qos features.
+type MemoryQOS struct {
 	// memcg qos
 	// If enabled, memcg qos will be set by the agent, where some fields are implicitly calculated from pod spec.
 	// 1. `memory.min` := spec.requests.memory * minLimitFactor / 100 (use 0 if requests.memory is not set)
@@ -86,52 +92,60 @@ type MemoryQoS struct {
 	OomKillGroup   *int64 `json:"oomKillGroup,omitempty"`
 }
 
-type PodMemoryQoSPolicy string
+type PodMemoryQOSPolicy string
 
 const (
-	// PodMemoryQoSPolicyDefault indicates pod inherits node-level config
-	PodMemoryQoSPolicyDefault PodMemoryQoSPolicy = "default"
-	// PodMemoryQoSPolicyNone indicates pod disables memory qos
-	PodMemoryQoSPolicyNone PodMemoryQoSPolicy = "none"
-	// PodMemoryQoSPolicyAuto indicates pod uses a recommended config
-	PodMemoryQoSPolicyAuto PodMemoryQoSPolicy = "auto"
+	// PodMemoryQOSPolicyDefault indicates pod inherits node-level config
+	PodMemoryQOSPolicyDefault PodMemoryQOSPolicy = "default"
+	// PodMemoryQOSPolicyNone indicates pod disables memory qos
+	PodMemoryQOSPolicyNone PodMemoryQOSPolicy = "none"
+	// PodMemoryQOSPolicyAuto indicates pod uses a recommended config
+	PodMemoryQOSPolicyAuto PodMemoryQOSPolicy = "auto"
 )
 
-type PodMemoryQoSConfig struct {
+type PodMemoryQOSConfig struct {
 	// Policy indicates the qos plan; use "default" if empty
-	Policy    PodMemoryQoSPolicy `json:"policy,omitempty"`
-	MemoryQoS `json:",inline"`
+	Policy    PodMemoryQOSPolicy `json:"policy,omitempty"`
+	MemoryQOS `json:",inline"`
 }
 
-// MemoryQoSCfg stores node-level config of memory qos
-type MemoryQoSCfg struct {
+// CPUQOSCfg stores node-level config of cpu qos
+type CPUQOSCfg struct {
+	// Enable indicates whether the cpu qos is enabled.
+	Enable *bool `json:"enable,omitempty"`
+	CPUQOS `json:",inline"`
+}
+
+// MemoryQOSCfg stores node-level config of memory qos
+type MemoryQOSCfg struct {
 	// Enable indicates whether the memory qos is enabled (default: false).
-	// This field is used for node-level control, while pod-level configuration is done with MemoryQoS and `Policy`
-	// instead of an `Enable` option. Please view the differences between MemoryQoSCfg and PodMemoryQoSConfig structs.
+	// This field is used for node-level control, while pod-level configuration is done with MemoryQOS and `Policy`
+	// instead of an `Enable` option. Please view the differences between MemoryQOSCfg and PodMemoryQOSConfig structs.
 	Enable    *bool `json:"enable,omitempty"`
-	MemoryQoS `json:",inline"`
+	MemoryQOS `json:",inline"`
 }
 
-type ResourceQoS struct {
-	MemoryQoS  *MemoryQoSCfg  `json:"memoryQoS,omitempty"`
-	ResctrlQoS *ResctrlQoSCfg `json:"resctrlQoS,omitempty"`
+type ResourceQOS struct {
+	CPUQOS     *CPUQOSCfg     `json:"cpuQOS,omitempty"`
+	MemoryQOS  *MemoryQOSCfg  `json:"memoryQOS,omitempty"`
+	ResctrlQOS *ResctrlQOSCfg `json:"resctrlQOS,omitempty"`
 }
 
-type ResourceQoSStrategy struct {
-	// ResourceQoS for LSR pods.
-	LSR *ResourceQoS `json:"lsr,omitempty"`
+type ResourceQOSStrategy struct {
+	// ResourceQOS for LSR pods.
+	LSRClass *ResourceQOS `json:"lsrClass,omitempty"`
 
-	// ResourceQoS for LS pods.
-	LS *ResourceQoS `json:"ls,omitempty"`
+	// ResourceQOS for LS pods.
+	LSClass *ResourceQOS `json:"lsClass,omitempty"`
 
-	// ResourceQoS for BE pods.
-	BE *ResourceQoS `json:"be,omitempty"`
+	// ResourceQOS for BE pods.
+	BEClass *ResourceQOS `json:"beClass,omitempty"`
 
-	// ResourceQoS for system pods
-	System *ResourceQoS `json:"system,omitempty"`
+	// ResourceQOS for system pods
+	SystemClass *ResourceQOS `json:"systemClass,omitempty"`
 
-	// ResourceQoS for root cgroup.
-	CgroupRoot *ResourceQoS `json:"cgroupRoot,omitempty"`
+	// ResourceQOS for root cgroup.
+	CgroupRoot *ResourceQOS `json:"cgroupRoot,omitempty"`
 }
 
 type CPUSuppressPolicy string
@@ -151,7 +165,6 @@ type ResourceThresholdStrategy struct {
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:validation:Minimum=0
 	CPUSuppressThresholdPercent *int64 `json:"cpuSuppressThresholdPercent,omitempty"`
-
 	// CPUSuppressPolicy
 	CPUSuppressPolicy CPUSuppressPolicy `json:"cpuSuppressPolicy,omitempty"`
 
@@ -160,21 +173,27 @@ type ResourceThresholdStrategy struct {
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:validation:Minimum=0
 	MemoryEvictThresholdPercent *int64 `json:"memoryEvictThresholdPercent,omitempty"`
-
 	// lower: memory release util usage under MemoryEvictLowerPercent, default = MemoryEvictThresholdPercent - 2
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:validation:Minimum=0
 	MemoryEvictLowerPercent *int64 `json:"memoryEvictLowerPercent,omitempty"`
+
+	// if be CPU RealLimit/allocatedLimit > CPUEvictBESatisfactionUpperPercent, then stop evict BE pods
+	CPUEvictBESatisfactionUpperPercent *int64 `json:"cpuEvictBESatisfactionUpperPercent,omitempty"`
+	// if be CPU (RealLimit/allocatedLimit < CPUEvictBESatisfactionLowerPercent and usage nearly 100%) continue CPUEvictTimeWindowSeconds,then start evict
+	CPUEvictBESatisfactionLowerPercent *int64 `json:"cpuEvictBESatisfactionLowerPercent,omitempty"`
+	// cpu evict start after continue avg(cpuusage) > CPUEvictThresholdPercent in seconds
+	CPUEvictTimeWindowSeconds *int64 `json:"cpuEvictTimeWindowSeconds,omitempty"`
 }
 
-// ResctrlQoSCfg stores node-level config of resctrl qos
-type ResctrlQoSCfg struct {
+// ResctrlQOSCfg stores node-level config of resctrl qos
+type ResctrlQOSCfg struct {
 	// Enable indicates whether the resctrl qos is enabled.
 	Enable     *bool `json:"enable,omitempty"`
-	ResctrlQoS `json:",inline"`
+	ResctrlQOS `json:",inline"`
 }
 
-type ResctrlQoS struct {
+type ResctrlQOS struct {
 	// LLC available range start for pods by percentage
 	// +kubebuilder:default=0
 	// +kubebuilder:validation:Minimum=0
@@ -232,7 +251,7 @@ type NodeSLOSpec struct {
 	// BE pods will be limited if node resource usage overload
 	ResourceUsedThresholdWithBE *ResourceThresholdStrategy `json:"resourceUsedThresholdWithBE,omitempty"`
 	// QoS config strategy for pods of different qos-class
-	ResourceQoSStrategy *ResourceQoSStrategy `json:"resourceQoSStrategy,omitempty"`
+	ResourceQOSStrategy *ResourceQOSStrategy `json:"resourceQOSStrategy,omitempty"`
 	// CPU Burst Strategy
 	CPUBurstStrategy *CPUBurstStrategy `json:"cpuBurstStrategy,omitempty"`
 }

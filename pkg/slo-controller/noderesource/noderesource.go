@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package noderesource
@@ -34,12 +34,6 @@ import (
 	"github.com/koordinator-sh/koordinator/pkg/slo-controller/config"
 	"github.com/koordinator-sh/koordinator/pkg/util"
 )
-
-type Config struct {
-	sync.RWMutex
-	config.ColocationCfg
-	isAvailable bool
-}
 
 type nodeBEResource struct {
 	IsColocationAvailable bool
@@ -81,31 +75,15 @@ func (s *SyncContext) Delete(key string) {
 	delete(s.contextMap, key)
 }
 
-func (r *NodeResourceReconciler) isColocationCfgAvailable() bool {
-	r.config.Lock()
-	defer r.config.Unlock()
-
-	if r.config.isAvailable {
-		return true
-	}
-
-	klog.Warning("colocation config is not available")
-	return false
-}
-
 func (r *NodeResourceReconciler) isColocationCfgDisabled(node *corev1.Node) bool {
-	r.config.Lock()
-	defer r.config.Unlock()
-
-	if r.config.Enable == nil || !*r.config.Enable {
+	cfg := r.cfgCache.GetCfgCopy()
+	if cfg.Enable == nil || !*cfg.Enable {
 		return true
 	}
-
-	strategy := config.GetNodeColocationStrategy(&r.config.ColocationCfg, node)
+	strategy := config.GetNodeColocationStrategy(cfg, node)
 	if strategy == nil || strategy.Enable == nil {
 		return true
 	}
-
 	return !(*strategy.Enable)
 }
 
@@ -115,14 +93,11 @@ func (r *NodeResourceReconciler) isDegradeNeeded(nodeMetric *slov1alpha1.NodeMet
 		return true
 	}
 
-	r.config.RLock()
-	defer r.config.RUnlock()
+	strategy := config.GetNodeColocationStrategy(r.cfgCache.GetCfgCopy(), node)
 
-	strategy := config.GetNodeColocationStrategy(&r.config.ColocationCfg, node)
-
-	if time.Now().After(nodeMetric.Status.UpdateTime.Add(time.Duration(*strategy.DegradeTimeMinutes) * time.Minute)) {
+	if r.Clock.Now().After(nodeMetric.Status.UpdateTime.Add(time.Duration(*strategy.DegradeTimeMinutes) * time.Minute)) {
 		klog.Warningf("timeout NodeMetric: %v, current timestamp: %v, metric last update timestamp: %v",
-			nodeMetric.Name, time.Now(), nodeMetric.Status.UpdateTime)
+			nodeMetric.Name, r.Clock.Now(), nodeMetric.Status.UpdateTime)
 		return true
 	}
 
@@ -198,7 +173,7 @@ func (r *NodeResourceReconciler) updateNodeBEResource(node *corev1.Node, beResou
 		}
 
 		if err := r.Client.Status().Update(context.TODO(), updateNode); err == nil {
-			r.SyncContext.Store(util.GetNodeKey(node), time.Now())
+			r.SyncContext.Store(util.GetNodeKey(node), r.Clock.Now())
 			return nil
 		} else {
 			klog.Errorf("failed to update node %v, error: %v", updateNode.Name, err)
@@ -212,14 +187,12 @@ func (r *NodeResourceReconciler) isBEResourceSyncNeeded(old, new *corev1.Node) b
 		klog.Errorf("invalid input, node should not be nil")
 		return false
 	}
-	r.config.RLock()
-	defer r.config.RUnlock()
 
-	strategy := config.GetNodeColocationStrategy(&r.config.ColocationCfg, new)
+	strategy := config.GetNodeColocationStrategy(r.cfgCache.GetCfgCopy(), new)
 
 	// scenario 1: update time gap is bigger than UpdateTimeThresholdSeconds
 	lastUpdatedTime, ok := r.SyncContext.Load(util.GetNodeKey(new))
-	if !ok || time.Now().After(lastUpdatedTime.Add(time.Duration(*strategy.UpdateTimeThresholdSeconds)*time.Second)) {
+	if !ok || r.Clock.Now().After(lastUpdatedTime.Add(time.Duration(*strategy.UpdateTimeThresholdSeconds)*time.Second)) {
 		klog.Warningf("node %v resource expired, need sync", new.Name)
 		return true
 	}

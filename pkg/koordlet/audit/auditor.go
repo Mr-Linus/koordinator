@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package audit
@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -130,9 +129,8 @@ func (a *auditor) gcExpiredReaders(expiredReaders []*readerContext) {
 
 func (a *auditor) HttpHandler() func(http.ResponseWriter, *http.Request) {
 	return func(rw http.ResponseWriter, r *http.Request) {
-		query := r.URL.Query()
-		sizeStr := paramenter(query, "size")
-		pageToken := paramenter(query, "pageToken")
+		sizeStr := r.URL.Query().Get("size")
+		pageToken := r.URL.Query().Get("pageToken")
 
 		klog.Infof("handle query client=%v pageToken=%v size=%v", r.RemoteAddr, pageToken, sizeStr)
 
@@ -161,7 +159,7 @@ func (a *auditor) HttpHandler() func(http.ResponseWriter, *http.Request) {
 		} else {
 			activeReader = a.findActiveReader(pageToken)
 			if activeReader == nil {
-				http.Error(rw, fmt.Sprintf("reader %v is existed", pageToken), http.StatusConflict)
+				http.Error(rw, fmt.Sprintf("invalid pageToken %s", pageToken), http.StatusConflict)
 				return
 			}
 		}
@@ -244,14 +242,6 @@ func (a *auditor) Run(stopCh <-chan struct{}) error {
 			a.gcExpiredReaders(expiredReaders)
 		}
 	}
-}
-
-func paramenter(query url.Values, key string) string {
-	values, ok := query[key]
-	if !ok || len(values) == 0 {
-		return ""
-	}
-	return values[0]
 }
 
 // emptyAuditor do nothing to mock Auditor

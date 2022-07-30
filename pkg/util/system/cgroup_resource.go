@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package system
@@ -41,7 +41,7 @@ const (
 	CPUSFileName      = "cpuset.cpus"
 	CPUTaskFileName   = "tasks"
 
-	CpuacctStatFileName = "cpuacct.stat"
+	CpuacctUsageFileName = "cpuacct.usage"
 
 	MemWmarkRatioFileName       = "memory.wmark_ratio"
 	MemWmarkScaleFactorFileName = "memory.wmark_scale_factor"
@@ -54,6 +54,8 @@ const (
 	MemHighFileName             = "memory.high"
 	MemoryLimitFileName         = "memory.limit_in_bytes"
 	MemStatFileName             = "memory.stat"
+
+	ProcsFileName = "cgroup.procs"
 )
 
 var (
@@ -81,7 +83,7 @@ var (
 
 	CPUSet = CgroupFile{ResourceFileName: CPUSFileName, Subfs: CgroupCPUSetDir, IsAnolisOS: false}
 
-	CpuacctStat = CgroupFile{ResourceFileName: CpuacctStatFileName, Subfs: CgroupCPUacctDir, IsAnolisOS: false}
+	CpuacctUsage = CgroupFile{ResourceFileName: CpuacctUsageFileName, Subfs: CgroupCPUacctDir, IsAnolisOS: false}
 
 	MemStat             = CgroupFile{ResourceFileName: MemStatFileName, Subfs: CgroupMemDir, IsAnolisOS: false}
 	MemoryLimit         = CgroupFile{ResourceFileName: MemoryLimitFileName, Subfs: CgroupMemDir, IsAnolisOS: false}
@@ -94,6 +96,8 @@ var (
 	MemMin              = CgroupFile{ResourceFileName: MemMinFileName, Subfs: CgroupMemDir, IsAnolisOS: true, Validator: MemMinValidator}
 	MemLow              = CgroupFile{ResourceFileName: MemLowFileName, Subfs: CgroupMemDir, IsAnolisOS: true, Validator: MemLowValidator}
 	MemHigh             = CgroupFile{ResourceFileName: MemHighFileName, Subfs: CgroupMemDir, IsAnolisOS: true, Validator: MemHighValidator}
+
+	CPUProcs = CgroupFile{ResourceFileName: ProcsFileName, Subfs: CgroupCPUDir, IsAnolisOS: false}
 )
 
 type CgroupFile struct {

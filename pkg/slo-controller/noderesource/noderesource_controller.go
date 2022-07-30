@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package noderesource
@@ -23,13 +23,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	slov1alpha1 "github.com/koordinator-sh/koordinator/apis/slo/v1alpha1"
+	"github.com/koordinator-sh/koordinator/pkg/slo-controller/config"
 )
 
 const (
@@ -40,14 +41,14 @@ const (
 type NodeResourceReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
-	config      Config
+	Clock       clock.Clock
 	SyncContext SyncContext
+
+	cfgCache config.ColocationCfgCache
 }
 
 func (r *NodeResourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx, "node-resource-reconciler", req.NamespacedName)
-
-	if !r.isColocationCfgAvailable() {
+	if !r.cfgCache.IsAvailable() {
 		klog.Warningf("colocation config is not available")
 		return ctrl.Result{Requeue: false}, nil
 	}
@@ -55,8 +56,9 @@ func (r *NodeResourceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	node := &corev1.Node{}
 	if err := r.Client.Get(context.TODO(), req.NamespacedName, node); err != nil {
 		if errors.IsNotFound(err) {
-			klog.Warningf("error: %v", err)
-			return ctrl.Result{Requeue: false}, err
+			// skip non-existing node and return no error to forget the request
+			klog.V(3).Infof("skip for node %v not found", req.Name)
+			return ctrl.Result{Requeue: false}, nil
 		} else {
 			klog.Errorf("failed to get node %v, error: %v", req.Name, err)
 			return ctrl.Result{Requeue: true}, err
@@ -64,7 +66,7 @@ func (r *NodeResourceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if r.isColocationCfgDisabled(node) {
-		klog.Warningf("colocation for node %v is disabled, reset BE resource", req.Name)
+		klog.Infof("colocation for node %v is disabled, reset BE resource", req.Name)
 		if err := r.resetNodeBEResource(node, disableInConfig, "node colocation is disabled in Config"); err != nil {
 			return ctrl.Result{Requeue: true}, err
 		} else {
@@ -75,10 +77,11 @@ func (r *NodeResourceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	nodeMetric := &slov1alpha1.NodeMetric{}
 	if err := r.Client.Get(context.TODO(), req.NamespacedName, nodeMetric); err != nil {
 		if errors.IsNotFound(err) {
-			klog.Warningf("error: %v", err)
-			return ctrl.Result{Requeue: false}, err
+			// skip non-existing node metric and return no error to forget the request
+			klog.V(3).Infof("skip for nodemetric %v not found", req.Name)
+			return ctrl.Result{Requeue: false}, nil
 		} else {
-			klog.Errorf("failed to get NodeMetric %v, error: %v", req.Name, err)
+			klog.Errorf("failed to get nodemetric %v, error: %v", req.Name, err)
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
@@ -110,9 +113,11 @@ func (r *NodeResourceReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 func (r *NodeResourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	handler := config.NewColocationHandlerForConfigMapEvent(r.Client, *config.NewDefaultColocationCfg())
+	r.cfgCache = handler.GetCache()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Node{}).
 		Watches(&source.Kind{Type: &slov1alpha1.NodeMetric{}}, &EnqueueRequestForNodeMetric{syncContext: &r.SyncContext}).
-		Watches(&source.Kind{Type: &corev1.ConfigMap{}}, &EnqueueRequestForConfigMap{Client: r.Client, Config: &r.config}).
+		Watches(&source.Kind{Type: &corev1.ConfigMap{}}, handler).
 		Complete(r)
 }

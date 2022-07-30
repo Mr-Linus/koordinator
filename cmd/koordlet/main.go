@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package main
@@ -32,6 +32,7 @@ import (
 	agent "github.com/koordinator-sh/koordinator/pkg/koordlet"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/audit"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/config"
+	"github.com/koordinator-sh/koordinator/pkg/koordlet/runtimehooks"
 )
 
 func init() {}
@@ -46,8 +47,10 @@ func main() {
 	defer klog.Flush()
 
 	if err := features.DefaultMutableKoordletFeatureGate.SetFromMap(cfg.FeatureGates); err != nil {
-		klog.Error("Unable to setup feature-gates: ", err)
-		os.Exit(1)
+		klog.Fatalf("Unable to setup feature-gates: %v", err)
+	}
+	if err := runtimehooks.DefaultMutableRuntimeHooksFG.SetFromMap(cfg.RuntimeHookConf.FeatureGates); err != nil {
+		klog.Fatalf("Unable to setup runtime-hooks: %v", err)
 	}
 
 	stopCtx := signals.SetupSignalHandler()

@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package util
@@ -47,10 +47,10 @@ func GetPodKubeRelativePath(pod *corev1.Pod) string {
 }
 
 // @podParentDir kubepods-burstable.slice/kubepods-pod7712555c_ce62_454a_9e18_9ff0217b8941.slice/
-// @output /sys/fs/cgroup/cpuacct/kubepods.slice/kubepods-burstable.slice/kubepods-pod7712555c_ce62_454a_9e18_9ff0217b8941.slice/cpuacct.proc_stat
-func GetPodCgroupCPUAcctProcStatPath(podParentDir string) string {
+// @output /sys/fs/cgroup/cpuacct/kubepods.slice/kubepods-burstable.slice/kubepods-pod7712555c_ce62_454a_9e18_9ff0217b8941.slice/cpuacct.usage
+func GetPodCgroupCPUAcctProcUsagePath(podParentDir string) string {
 	podPath := GetPodCgroupDirWithKube(podParentDir)
-	return system.GetCgroupFilePath(podPath, system.CpuacctStat)
+	return system.GetCgroupFilePath(podPath, system.CpuacctUsage)
 }
 
 // @podParentDir kubepods-burstable.slice/kubepods-pod7712555c_ce62_454a_9e18_9ff0217b8941.slice/
@@ -73,7 +73,7 @@ func GetPodCgroupCFSQuotaPath(podParentDir string) string {
 }
 
 // @podParentDir kubepods-burstable.slice/kubepods-pod7712555c_ce62_454a_9e18_9ff0217b8941.slice/
-// @output /sys/fs/cgroup/cpuacct/kubepods.slice/kubepods-burstable.slice/kubepods-pod7712555c_ce62_454a_9e18_9ff0217b8941.slice/cpuacct.proc_stat
+// @output /sys/fs/cgroup/memory/kubepods.slice/kubepods-burstable.slice/kubepods-pod7712555c_ce62_454a_9e18_9ff0217b8941.slice/memory.stat
 func GetPodCgroupMemStatPath(podParentDir string) string {
 	podPath := GetPodCgroupDirWithKube(podParentDir)
 	return system.GetCgroupFilePath(podPath, system.MemStat)
@@ -95,10 +95,19 @@ func GetPodCgroupCPUStatPath(podParentDir string) string {
 
 func GetKubeQosClass(pod *corev1.Pod) corev1.PodQOSClass {
 	qosClass := pod.Status.QOSClass
-	if qosClass == "" {
+	if len(qosClass) <= 0 {
 		qosClass = qos.GetPodQOS(pod)
 	}
 	return qosClass
+}
+
+func GetKubeQoSByCgroupParent(cgroupDir string) corev1.PodQOSClass {
+	if strings.Contains(cgroupDir, "besteffort") {
+		return corev1.PodQOSBestEffort
+	} else if strings.Contains(cgroupDir, "burstable") {
+		return corev1.PodQOSBurstable
+	}
+	return corev1.PodQOSGuaranteed
 }
 
 func GetPodBEMilliCPURequest(pod *corev1.Pod) int64 {
@@ -107,13 +116,11 @@ func GetPodBEMilliCPURequest(pod *corev1.Pod) int64 {
 	for _, container := range pod.Spec.Containers {
 		containerCPUMilliReq := GetContainerBEMilliCPURequest(&container)
 		if containerCPUMilliReq <= 0 {
-			return -1
+			containerCPUMilliReq = 0
 		}
 		podCPUMilliReq += containerCPUMilliReq
 	}
-	if podCPUMilliReq <= 0 {
-		return -1
-	}
+
 	return podCPUMilliReq
 }
 
@@ -242,4 +249,8 @@ func GetPodRequest(pod *corev1.Pod, resourceNames ...corev1.ResourceName) corev1
 		result = quotav1.Mask(result, resourceNames)
 	}
 	return result
+}
+
+func IsPodTerminated(pod *corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed
 }

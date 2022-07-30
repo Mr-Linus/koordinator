@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package util
@@ -92,18 +92,18 @@ func ParseCPUSetStr(cpusetStr string) ([]int32, error) {
 		boundaries := strings.Split(r, "-")
 		if len(boundaries) == 1 {
 			// only one element case, eg. "46"
-			elem, err := strconv.Atoi(boundaries[0])
+			elem, err := strconv.ParseInt(boundaries[0], 10, 32)
 			if err != nil {
 				return nil, err
 			}
 			cpuset = append(cpuset, int32(elem))
 		} else if len(boundaries) == 2 {
 			// multi-element case, eg. "0-5"
-			start, err := strconv.Atoi(boundaries[0])
+			start, err := strconv.ParseInt(boundaries[0], 10, 32)
 			if err != nil {
 				return nil, err
 			}
-			end, err := strconv.Atoi(boundaries[1])
+			end, err := strconv.ParseInt(boundaries[1], 10, 32)
 			if err != nil {
 				return nil, err
 			}

@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package reporter
@@ -26,6 +26,7 @@ import (
 	"golang.org/x/time/rate"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -37,6 +38,8 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 
+	apiext "github.com/koordinator-sh/koordinator/apis/extension"
+	schedulingv1alpha1 "github.com/koordinator-sh/koordinator/apis/scheduling/v1alpha1"
 	slov1alpha1 "github.com/koordinator-sh/koordinator/apis/slo/v1alpha1"
 	clientsetbeta1 "github.com/koordinator-sh/koordinator/pkg/client/clientset/versioned"
 	clientbeta1 "github.com/koordinator-sh/koordinator/pkg/client/clientset/versioned/typed/slo/v1alpha1"
@@ -199,7 +202,7 @@ func (r *reporter) sync() {
 		nodeMetric, err := r.nodeMetricLister.Get(r.nodeName)
 		if errors.IsNotFound(err) {
 			klog.Warningf("nodeMetric %v not found, skip", r.nodeName)
-			return err
+			return nil
 		} else if err != nil {
 			klog.Warningf("failed to get %s nodeMetric: %v", r.nodeName, err)
 			return err
@@ -211,7 +214,7 @@ func (r *reporter) sync() {
 	if retErr != nil {
 		klog.Warningf("update node metric status failed, status %v, err %v", util.DumpJSON(newStatus), retErr)
 	} else {
-		klog.Infof("update node metric status success, detail: %v", util.DumpJSON(newStatus))
+		klog.V(4).Infof("update node metric status success, detail: %v", util.DumpJSON(newStatus))
 	}
 }
 
@@ -354,19 +357,57 @@ func (su *statusUpdater) updateStatus(nodeMetric *slov1alpha1.NodeMetric, newSta
 }
 
 func convertNodeMetricToResourceMap(nodeMetric *metriccache.NodeResourceMetric) *slov1alpha1.ResourceMap {
+	var deviceInfos []schedulingv1alpha1.DeviceInfo
+	if len(nodeMetric.GPUs) > 0 {
+		for _, gpu := range nodeMetric.GPUs {
+			memoryRatioRaw := 100 * float64(gpu.MemoryUsed.Value()) / float64(gpu.MemoryTotal.Value())
+			gpuInfo := schedulingv1alpha1.DeviceInfo{
+				UUID:  gpu.DeviceUUID,
+				Minor: gpu.Minor,
+				Type:  schedulingv1alpha1.GPU,
+				// TODO: how to check the health status of GPU
+				Resources: map[corev1.ResourceName]resource.Quantity{
+					apiext.GPUCore:        *resource.NewQuantity(int64(gpu.SMUtil), resource.BinarySI),
+					apiext.GPUMemory:      gpu.MemoryUsed,
+					apiext.GPUMemoryRatio: *resource.NewQuantity(int64(memoryRatioRaw), resource.BinarySI),
+				},
+			}
+			deviceInfos = append(deviceInfos, gpuInfo)
+		}
+	}
 	return &slov1alpha1.ResourceMap{
 		ResourceList: corev1.ResourceList{
 			corev1.ResourceCPU:    nodeMetric.CPUUsed.CPUUsed,
 			corev1.ResourceMemory: nodeMetric.MemoryUsed.MemoryWithoutCache,
 		},
+		Devices: deviceInfos,
 	}
 }
 
 func convertPodMetricToResourceMap(podMetric *metriccache.PodResourceMetric) *slov1alpha1.ResourceMap {
+	var deviceInfos []schedulingv1alpha1.DeviceInfo
+	if len(podMetric.GPUs) > 0 {
+		for _, gpu := range podMetric.GPUs {
+			memoryRatioRaw := 100 * float64(gpu.MemoryUsed.Value()) / float64(gpu.MemoryTotal.Value())
+			gpuInfo := schedulingv1alpha1.DeviceInfo{
+				UUID:  gpu.DeviceUUID,
+				Minor: gpu.Minor,
+				Type:  schedulingv1alpha1.GPU,
+				// TODO: how to check the health status of GPU
+				Resources: map[corev1.ResourceName]resource.Quantity{
+					apiext.GPUCore:        *resource.NewQuantity(int64(gpu.SMUtil), resource.DecimalSI),
+					apiext.GPUMemory:      gpu.MemoryUsed,
+					apiext.GPUMemoryRatio: *resource.NewQuantity(int64(memoryRatioRaw), resource.DecimalSI),
+				},
+			}
+			deviceInfos = append(deviceInfos, gpuInfo)
+		}
+	}
 	return &slov1alpha1.ResourceMap{
 		ResourceList: corev1.ResourceList{
 			corev1.ResourceCPU:    podMetric.CPUUsed.CPUUsed,
 			corev1.ResourceMemory: podMetric.MemoryUsed.MemoryWithoutCache,
 		},
+		Devices: deviceInfos,
 	}
 }

@@ -4,8 +4,8 @@ GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
 GIT_COMMIT_ID ?= $(shell git rev-parse --short HEAD)
 
 # Image URL to use all building/pushing image targets
-REG ?= docker.io
-REG_NS ?= koordinatorsh
+REG ?= ghcr.io
+REG_NS ?= koordinator-sh
 REG_USER ?= ""
 REG_PWD ?= ""
 
@@ -17,7 +17,7 @@ KOORD_SCHEDULER_IMG ?= "${REG}/${REG_NS}/koord-scheduler:${GIT_BRANCH}-${GIT_COM
 ENVTEST_K8S_VERSION = 1.23
 
 # Set license header files.
-LICENSE_HEADER_GO ?= hack/boilerplate.go.txt
+LICENSE_HEADER_GO ?= hack/boilerplate/boilerplate.go.txt
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -61,8 +61,9 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	@hack/generate_client.sh
 	$(CONTROLLER_GEN) object:headerFile="$(LICENSE_HEADER_GO)" paths="./apis/..."
+	$(CONTROLLER_GEN) object:headerFile="$(LICENSE_HEADER_GO)" paths="./pkg/slo-controller/config/..."
+	@hack/update-codegen.sh
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -80,8 +81,8 @@ lint-go: golangci-lint ## Lint Go code.
 	$(GOLANGCI_LINT) run -v --timeout=5m
 
 .PHONY: lint-license
-lint-license: license-header-checker ## Check license headers.
-	$(LICENSE_HEADER_CHECKER) -a -v -i vendor "$(LICENSE_HEADER_GO)" . go
+lint-license: 
+	@hack/update-license-header.sh
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
@@ -90,7 +91,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 ##@ Build
 
 .PHONY: build
-build: generate fmt vet lint build-koordlet build-koord-manager build-koord-scheduler
+build: generate fmt vet lint build-koordlet build-koord-manager build-koord-scheduler build-koord-runtime-proxy
 
 .PHONY: build-koordlet
 build-koordlet: ## Build koordlet binary.
@@ -104,20 +105,24 @@ build-koord-manager: ## Build koord-manager binary.
 build-koord-scheduler: ## Build koord-scheduler binary.
 	go build -o bin/koord-scheduler cmd/koord-scheduler/main.go
 
+.PHONY: build-koord-runtime-proxy
+build-koord-runtime-proxy: ## Build koord-runtime-proxy binary.
+	go build -o bin/koord-runtime-proxy cmd/koord-runtime-proxy/main.go
+
 .PHONY: docker-build
 docker-build: test docker-build-koordlet docker-build-koord-manager docker-build-koord-scheduler
 
 .PHONY: docker-build-koordlet
 docker-build-koordlet: ## Build docker image with the koordlet.
-	docker build --build-arg MODULE=koordlet -t ${KOORDLET_IMG} .
+	docker build --pull -t ${KOORDLET_IMG} -f docker/koordlet.dockerfile .
 
 .PHONY: docker-build-koord-manager
 docker-build-koord-manager: ## Build docker image with the koord-manager.
-	docker build --build-arg MODULE=koord-manager -t ${KOORD_MANAGER_IMG} .
+	docker build --pull -t ${KOORD_MANAGER_IMG} -f docker/koord-manager.dockerfile .
 
 .PHONY: docker-build-koord-scheduler
 docker-build-koord-scheduler: ## Build docker image with the scheduler.
-	docker build --build-arg MODULE=koord-scheduler -t ${KOORD_SCHEDULER_IMG} .
+	docker build --pull -t ${KOORD_SCHEDULER_IMG} -f docker/koord-scheduler.dockerfile .
 
 .PHONY: docker-push
 docker-push: docker-push-koordlet docker-push-koord-manager docker-push-koord-scheduler
@@ -178,13 +183,12 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
-LICENSE_HEADER_CHECKER ?= $(LOCALBIN)/license-header-checker
+HACK_DIR ?= $(PWD)/hack
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.8.0
 GOLANGCILINT_VERSION ?= v1.45.2
-LICENSEHEADERCHECKER_VERSION ?= v1.3.0
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -206,8 +210,3 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCILINT_VERSION)
-
-.PHONY: license-header-checker
-license-header-checker: $(LICENSE_HEADER_CHECKER) ## Download license-header-checker locally if necessary.
-$(LICENSE_HEADER_CHECKER):
-	GOBIN=$(LOCALBIN) go install github.com/lsm-dev/license-header-checker/cmd/license-header-checker@$(LICENSEHEADERCHECKER_VERSION)

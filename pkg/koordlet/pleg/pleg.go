@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package pleg
@@ -24,6 +24,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/koordinator-sh/koordinator/pkg/util"
+	"github.com/koordinator-sh/koordinator/pkg/util/system"
 )
 
 const (
@@ -134,7 +135,9 @@ func (p *pleg) RemoverHandler(id HandlerID) PodLifeCycleHandler {
 func (p *pleg) Run(stopCh <-chan struct{}) error {
 	qosClasses := []corev1.PodQOSClass{corev1.PodQOSGuaranteed, corev1.PodQOSBurstable, corev1.PodQOSBestEffort}
 	for _, qosClass := range qosClasses {
-		cgroupPath := path.Join(p.cgroupRootPath, util.GetPodQoSRelativePath(qosClass))
+		// here we choose cpu subsystem as ground truth,
+		// since we only need to watch one of all subsystems, and cpu subsystem always and must exist
+		cgroupPath := path.Join(p.cgroupRootPath, system.CgroupCPUDir, util.GetPodQoSRelativePath(qosClass))
 		err := p.podWatcher.AddWatch(cgroupPath)
 		if err != nil {
 			klog.Errorf("failed to watch path %v err %v", cgroupPath, err)

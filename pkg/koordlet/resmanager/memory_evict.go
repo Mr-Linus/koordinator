@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package resmanager
@@ -51,11 +51,11 @@ func NewMemoryEvictor(mgr *resmanager) *MemoryEvictor {
 }
 
 func (m *MemoryEvictor) memoryEvict() {
-	klog.Infof("starting memory evict process")
-	defer klog.Infof("memory evict process completed")
+	klog.V(5).Infof("starting memory evict process")
+	defer klog.V(5).Infof("memory evict process completed")
 
 	if time.Now().Before(m.lastEvictTime.Add(time.Duration(m.resManager.config.MemoryEvictCoolTimeSeconds) * time.Second)) {
-		klog.Infof("skip memory evict process, still in evict cooling time")
+		klog.V(5).Infof("skip memory evict process, still in evict cooling time")
 		return
 	}
 
@@ -110,7 +110,7 @@ func (m *MemoryEvictor) memoryEvict() {
 
 	nodeMemoryUsage := nodeMetric.MemoryUsed.MemoryWithoutCache.Value() * 100 / memoryCapacity
 	if nodeMemoryUsage < *thresholdPercent {
-		klog.Infof("skip memory evict, node memory usage(%v) is below threshold(%v)", nodeMemoryUsage, thresholdConfig)
+		klog.V(5).Infof("skip memory evict, node memory usage(%v) is below threshold(%v)", nodeMemoryUsage, thresholdConfig)
 		return
 	}
 

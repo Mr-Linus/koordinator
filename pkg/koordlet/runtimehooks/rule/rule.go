@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package rule
@@ -23,19 +23,20 @@ import (
 
 	"k8s.io/klog/v2"
 
-	slov1alpha1 "github.com/koordinator-sh/koordinator/apis/slo/v1alpha1"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
+	"github.com/koordinator-sh/koordinator/pkg/util"
 )
 
 type Rule struct {
 	name            string
 	description     string
-	parseFunc       ParseRuleFn
+	parseRuleType   statesinformer.RegisterType
+	parseRuleFn     ParseRuleFn
 	callbacks       []UpdateCbFn
 	systemSupported bool
 }
 
-type ParseRuleFn func(nodeSLO *slov1alpha1.NodeSLOSpec) (bool, error)
+type ParseRuleFn func(interface{}) (bool, error)
 type UpdateCbFn func(pods []*statesinformer.PodMeta) error
 type SysSupportFn func() bool
 
@@ -52,6 +53,7 @@ func Register(name, description string, injectOpts ...InjectOption) *Rule {
 	for _, opt := range injectOpts {
 		opt.Apply(r)
 	}
+	klog.V(5).Infof("new rule %v has registered", name)
 	return r
 }
 
@@ -70,32 +72,37 @@ func find(name string) (*Rule, bool) {
 	if r, exist := globalHookRules[name]; exist {
 		return r, true
 	}
-	newRule := &Rule{name: name}
+	newRule := &Rule{name: name, systemSupported: true}
 	globalHookRules[name] = newRule
 	return newRule, false
 }
 
-func UpdateRules(nodeSLO *slov1alpha1.NodeSLOSpec) {
-	klog.Infof("applying rules with new NodeSLO %v", nodeSLO)
+func UpdateRules(ruleType statesinformer.RegisterType, ruleObj interface{}, podsMeta []*statesinformer.PodMeta) {
+	klog.V(3).Infof("applying %v rules with new %v, detail: %v",
+		len(globalHookRules), ruleType.String(), util.DumpJSON(ruleObj))
 	for _, r := range globalHookRules {
+		if ruleType != r.parseRuleType {
+			continue
+		}
 		if !r.systemSupported {
-			klog.Infof("system unsupported for rule %s, do nothing during UpdateRules", r.name)
+			klog.V(4).Infof("system unsupported for rule %s, do nothing during UpdateRules", r.name)
 			return
 		}
-		updated, err := r.parseFunc(nodeSLO)
+		if r.parseRuleFn == nil {
+			continue
+		}
+		updated, err := r.parseRuleFn(ruleObj)
 		if err != nil {
 			klog.Warningf("parse rule %s from nodeSLO failed, error: %v", r.name, err)
 			continue
 		}
 		if updated {
-			// TODO get all pods from stats informer *synchronously*
-			var pods []*statesinformer.PodMeta
-			r.runUpdateCallbacks(pods)
+			klog.V(3).Infof("rule %s is updated, run update callback for all %v pods", r.name, len(podsMeta))
+			r.runUpdateCallbacks(podsMeta)
 		}
 	}
 }
 
 func init() {
 	globalHookRules = map[string]*Rule{}
-	// TODO register rule.UpdateRules to states-informer, as callback function when nodeSLO Spec created or updated
 }

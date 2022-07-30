@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package util
@@ -278,4 +278,92 @@ func Test_UtilCgroupCPUSet(t *testing.T) {
 	gotCPUSet, err := ParseCPUSetStr(gotCPUSetStr)
 	assert.NoError(t, err)
 	assert.Equal(t, cpuset, gotCPUSet)
+}
+
+func TestMinInt64(t *testing.T) {
+	type args struct {
+		i int64
+		j int64
+	}
+	tests := []struct {
+		name string
+		args args
+		want int64
+	}{
+		{
+			name: "i < j",
+			args: args{
+				i: 0,
+				j: 1,
+			},
+			want: 0,
+		},
+		{
+			name: "i > j",
+			args: args{
+				i: 1,
+				j: 0,
+			},
+			want: 0,
+		},
+		{
+			name: "i = j",
+			args: args{
+				i: 0,
+				j: 0,
+			},
+			want: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := MinInt64(tt.args.i, tt.args.j); got != tt.want {
+				t.Errorf("MinInt64() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMaxInt64(t *testing.T) {
+	type args struct {
+		i int64
+		j int64
+	}
+	tests := []struct {
+		name string
+		args args
+		want int64
+	}{
+		{
+			name: "i < j",
+			args: args{
+				i: 0,
+				j: 1,
+			},
+			want: 1,
+		},
+		{
+			name: "i > j",
+			args: args{
+				i: 1,
+				j: 0,
+			},
+			want: 1,
+		},
+		{
+			name: "i = j",
+			args: args{
+				i: 0,
+				j: 0,
+			},
+			want: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := MaxInt64(tt.args.i, tt.args.j); got != tt.want {
+				t.Errorf("MaxInt64() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package main
@@ -22,16 +22,33 @@ import (
 	"time"
 
 	"k8s.io/component-base/logs"
-	"k8s.io/kubernetes/cmd/kube-scheduler/app"
+
+	"github.com/koordinator-sh/koordinator/cmd/koord-scheduler/app"
+	"github.com/koordinator-sh/koordinator/pkg/scheduler/frameworkext"
+	"github.com/koordinator-sh/koordinator/pkg/scheduler/plugins/compatibledefaultpreemption"
+	"github.com/koordinator-sh/koordinator/pkg/scheduler/plugins/loadaware"
+	"github.com/koordinator-sh/koordinator/pkg/scheduler/plugins/nodenumaresource"
+
+	// Ensure scheme package is initialized.
+	_ "github.com/koordinator-sh/koordinator/apis/scheduling/config/scheme"
 )
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
+	// Register custom scheduling hooks for pre-process scheduling context before call plugins.
+	// e.g. change the nodeInfo and make a copy before calling filter plugins
+	var schedulingHooks []frameworkext.SchedulingPhaseHook
+
 	// Register custom plugins to the scheduler framework.
 	// Later they can consist of scheduler profile(s) and hence
 	// used by various kinds of workloads.
-	command := app.NewSchedulerCommand()
+	command := app.NewSchedulerCommand(
+		schedulingHooks,
+		app.WithPlugin(loadaware.Name, loadaware.New),
+		app.WithPlugin(nodenumaresource.Name, nodenumaresource.New),
+		app.WithPlugin(compatibledefaultpreemption.Name, compatibledefaultpreemption.New),
+	)
 
 	logs.InitLogs()
 	defer logs.FlushLogs()

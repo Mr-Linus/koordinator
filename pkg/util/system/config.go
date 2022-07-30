@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package system
@@ -82,16 +82,16 @@ func SetConf(config Config) {
 }
 
 func (c *Config) InitFlags(fs *flag.FlagSet) {
-	fs.StringVar(&c.CgroupRootDir, "CgroupRootDir", c.CgroupRootDir, "Cgroup root dir")
-	fs.StringVar(&c.SysFSRootDir, "SysRootDir", c.SysFSRootDir, "host /sys dir in container")
-	fs.StringVar(&c.SysFSRootDir, "SysFSRootDir", c.SysFSRootDir, "host /sys/fs dir in container, used by resctrl fs")
-	fs.StringVar(&c.ProcRootDir, "ProcRootDir", c.ProcRootDir, "host /proc dir in container")
-	fs.StringVar(&c.VarRunRootDir, "VarRunRootDir", c.VarRunRootDir, "host /var/run dir in container")
+	fs.StringVar(&c.CgroupRootDir, "cgroup-root-dir", c.CgroupRootDir, "Cgroup root dir")
+	fs.StringVar(&c.SysFSRootDir, "sys-root-dir", c.SysFSRootDir, "host /sys dir in container")
+	fs.StringVar(&c.SysFSRootDir, "sys-fs-root-dir", c.SysFSRootDir, "host /sys/fs dir in container, used by resctrl fs")
+	fs.StringVar(&c.ProcRootDir, "proc-root-dir", c.ProcRootDir, "host /proc dir in container")
+	fs.StringVar(&c.VarRunRootDir, "var-run-root-dir", c.VarRunRootDir, "host /var/run dir in container")
 
-	fs.StringVar(&c.CgroupKubePath, "CgroupKubeDir", c.CgroupKubePath, "Cgroup kube dir")
+	fs.StringVar(&c.CgroupKubePath, "cgroup-kube-dir", c.CgroupKubePath, "Cgroup kube dir")
 	fs.StringVar(&c.NodeNameOverride, "node-name-override", c.NodeNameOverride, "If non-empty, will use this string as identification instead of the actual machine name. ")
-	fs.StringVar(&c.ContainerdEndPoint, "containerdEndPoint", c.ContainerdEndPoint, "containerd endPoint")
-	fs.StringVar(&c.DockerEndPoint, "dockerEndPoint", c.DockerEndPoint, "docker endPoint")
+	fs.StringVar(&c.ContainerdEndPoint, "containerd-endpoint", c.ContainerdEndPoint, "containerd endPoint")
+	fs.StringVar(&c.DockerEndPoint, "docker-endpoint", c.DockerEndPoint, "docker endPoint")
 
 	HostSystemInfo = collectVersionInfo()
 	initFilePath()

@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package util
@@ -65,38 +65,35 @@ func GetCPUStatUsageTicks() (uint64, error) {
 	return readTotalCPUStat(system.ProcStatFile.File)
 }
 
-func readCPUAcctStatUsageTicks(statPath string) (uint64, error) {
-	// format: user $user\nnice $nice\nsystem $system\nidle $idle\niowait $iowait\nirq $irq\nsoftirq $softirq
-	rawStats, err := ioutil.ReadFile(statPath)
+func readCPUAcctUsage(usagePath string) (uint64, error) {
+	v, err := ioutil.ReadFile(usagePath)
 	if err != nil {
 		return 0, err
 	}
-	var total uint64 = 0
-	stats := strings.Split(string(rawStats), "\n")
-	for _, stat := range stats {
-		fieldStat := strings.Fields(stat)
-		// stat usage: $user + $nice + $system + $irq + $softirq
-		if len(fieldStat) == 2 && CpuacctUsageTypeStat.Has(fieldStat[0]) {
-			v, err := strconv.ParseUint(fieldStat[1], 10, 64)
-			if err != nil {
-				return 0, fmt.Errorf("failed to parse pod stats %v, err: %s", stats, err)
-			}
-			total += v
-		}
+
+	r, err1 := strconv.ParseUint(strings.TrimSpace(string(v)), 10, 64)
+	if err1 != nil {
+		return 0, err1
 	}
-	return total, nil
+	return r, nil
 }
 
-// GetPodCPUStatUsageTicks returns the pod's CPU usage ticks
-func GetPodCPUStatUsageTicks(podCgroupDir string) (uint64, error) {
-	podStatPath := GetPodCgroupCPUAcctProcStatPath(podCgroupDir)
-	return readCPUAcctStatUsageTicks(podStatPath)
+// GetPodCPUUsage returns the pod's CPU usage in nanosecond
+func GetPodCPUUsageNanoseconds(podCgroupDir string) (uint64, error) {
+	podStatPath := GetPodCgroupCPUAcctProcUsagePath(podCgroupDir)
+	return readCPUAcctUsage(podStatPath)
 }
 
-func GetContainerCPUStatUsageTicks(podCgroupDir string, c *corev1.ContainerStatus) (uint64, error) {
-	containerStatPath, err := GetContainerCgroupCPUAcctProcStatPath(podCgroupDir, c)
+func GetContainerCPUUsageNanoseconds(podCgroupDir string, c *corev1.ContainerStatus) (uint64, error) {
+	containerStatPath, err := GetContainerCgroupCPUAcctUsagePath(podCgroupDir, c)
 	if err != nil {
 		return 0, err
 	}
-	return readCPUAcctStatUsageTicks(containerStatPath)
+	return readCPUAcctUsage(containerStatPath)
+}
+
+func GetRootCgroupCPUUsageNanoseconds(qosClass corev1.PodQOSClass) (uint64, error) {
+	rootCgroupParentDir := GetKubeQosRelativePath(qosClass)
+	statPath := system.GetCgroupFilePath(rootCgroupParentDir, system.CpuacctUsage)
+	return readCPUAcctUsage(statPath)
 }

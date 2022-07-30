@@ -1,17 +1,17 @@
 /*
- Copyright 2022 The Koordinator Authors.
+Copyright 2022 The Koordinator Authors.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 package resmanager
@@ -509,12 +509,16 @@ func (b *CPUBurst) applyCPUBurst(burstCfg *slov1alpha1.CPUBurstConfig, podMeta *
 			containerCFSBurstValStr := strconv.FormatInt(containerCFSBurstVal, 10)
 			updater := NewCommonCgroupResourceUpdater(ownerRef, containerDir, system.CPUBurst, containerCFSBurstValStr)
 			updated, err := b.executor.UpdateByCache(updater)
-			if err != nil {
+			if err == nil {
+				klog.V(5).Infof("apply container %v/%v/%v cpu burst value success, dir %v, value %v",
+					pod.Namespace, pod.Name, containerStat.Name, containerDir, containerCFSBurstVal)
+			} else if system.HostSystemInfo.IsAnolisOS {
+				// cgroup `cpu.burst_us` is expected available on anolis os, and it may not exist in other kernels.
 				klog.Infof("update container %v/%v/%v cpu burst failed, dir %v, updated %v, error %v",
 					pod.Namespace, pod.Name, containerStat.Name, containerDir, updated, err)
 			} else {
-				klog.V(5).Infof("apply container %v/%v/%v cpu burst value success, dir %v, value %v",
-					pod.Namespace, pod.Name, containerStat.Name, containerDir, containerCFSBurstVal)
+				klog.V(4).Infof("update container %v/%v/%v cpu burst ignored on non Anolis OS, dir %v, "+
+					"updated %v, info %v", pod.Namespace, pod.Name, containerStat.Name, containerDir, updated, err)
 			}
 		}
 	} // end for containers
@@ -525,12 +529,16 @@ func (b *CPUBurst) applyCPUBurst(burstCfg *slov1alpha1.CPUBurstConfig, podMeta *
 		podCFSBurstValStr := strconv.FormatInt(podCFSBurstVal, 10)
 		updater := NewCommonCgroupResourceUpdater(ownerRef, podDir, system.CPUBurst, podCFSBurstValStr)
 		updated, err := b.executor.UpdateByCache(updater)
-		if err != nil {
+		if err == nil {
+			klog.V(5).Infof("apply pod %v/%v cpu burst value success, dir %v, value %v",
+				pod.Namespace, pod.Name, podDir, podCFSBurstValStr)
+		} else if system.HostSystemInfo.IsAnolisOS {
+			// cgroup `cpu.burst_us` is expected available on anolis os, and it may not exist in other kernels.
 			klog.Infof("update pod %v/%v cpu burst failed, dir %v, updated %v, error %v",
 				pod.Namespace, pod.Name, podDir, updated, err)
 		} else {
-			klog.V(5).Infof("apply pod %v/%v cpu burst value success, dir %v, value %v",
-				pod.Namespace, pod.Name, podDir, podCFSBurstValStr)
+			klog.V(4).Infof("update pod %v/%v cpu burst ignored on non Anolis OS, dir %v, updated %v, "+
+				"info %v", pod.Namespace, pod.Name, podDir, updated, err)
 		}
 	}
 }
